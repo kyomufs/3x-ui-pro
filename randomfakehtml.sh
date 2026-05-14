@@ -13,16 +13,11 @@ function msg_err() { echo -e "${ERROR} ${Yellow} $1 ${Font}"; }
 ###################################
 apt install unzip -y
 cd $HOME
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ZIP_FILE="$SCRIPT_DIR/randomfakehtml-master.zip"
 if [[ -d "randomfakehtml-master" ]]; then
 	cd randomfakehtml-master
 else
-	if [[ ! -f "$ZIP_FILE" ]]; then
-		msg_err "Local archive not found: $ZIP_FILE"
-		exit 1
-	fi
-	unzip -o "$ZIP_FILE"
+	wget https://github.com/GFW4Fun/randomfakehtml/archive/refs/heads/master.zip
+	unzip master.zip && rm master.zip
 	cd randomfakehtml-master
 	rm -rf assets
 	rm ".gitattributes" "README.md" "_config.yml"
