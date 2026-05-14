@@ -27,20 +27,26 @@
 ### Install X-UI-PRO
 
 ```
-bash <(wget -qO- https://github.com/mozaroc/x-ui-pro/raw/master/x-ui-pro.sh) -install yes -panel 1 -ONLY_CF_IP_ALLOW no
+bash <(wget -qO- https://raw.githubusercontent.com/kyomufs/3x-ui-pro/refs/heads/main/x-ui-pro.sh) -install yes -panel 1 -ONLY_CF_IP_ALLOW no
 ```
 > 
 > Do not change SubDomain for renew SSL❗
 
 
+**Reinstall X-UI-PRO**:repeat:
+```
+sudo su -c "bash <(wget -qO- https://raw.githubusercontent.com/kyomufs/3x-ui-pro/refs/heads/main/x-ui-pro.sh) -uninstall yes" && sudo su -c "bash <(wget -qO- https://raw.githubusercontent.com/kyomufs/3x-ui-pro/refs/heads/main/x-ui-pro.sh) -install yes -panel 1 -ONLY_CF_IP_ALLOW no"
+```
+
+
 **Uninstall X-UI-PRO**:x:
 ```
-sudo su -c "bash <(wget -qO- https://raw.githubusercontent.com/mozaroc/x-ui-pro/master/x-ui-pro.sh) -Uninstall yes"
+sudo su -c "bash <(wget -qO- https://raw.githubusercontent.com/kyomufs/3x-ui-pro/refs/heads/main/x-ui-pro.sh) -uninstall yes"
 ```
 
 **backup panel and nginx configs**:x:
 ```
-sudo su -c "bash <(wget -qO- https://raw.githubusercontent.com/mozaroc/x-ui-pro/master/backup.sh)"
+sudo su -c "bash <(wget -qO- https://raw.githubusercontent.com/kyomufs/3x-ui-pro/refs/heads/main/backup.sh)"
 ```
 
 ➖➖➖➖➖➖➖➖➖➖➖➖➖➖➖➖➖➖➖➖➖➖➖➖➖
