@@ -230,7 +230,7 @@ issue_ssl_cert() {
   "$acme_bin" --set-default-ca --server zerossl >>"$acme_log" 2>&1 || true
   "$acme_bin" --register-account --server zerossl -m "admin@${cert_domain}" >>"$acme_log" 2>&1 || true
   "$acme_bin" --remove -d "$cert_domain" --ecc >>"$acme_log" 2>&1 || true
-  if ! "$acme_bin" --issue --standalone --server zerossl -d "$cert_domain" --debug 2 >>"$acme_log" 2>&1; then
+  if ! "$acme_bin" --issue --standalone --force --server zerossl -d "$cert_domain" --debug 2 >>"$acme_log" 2>&1; then
     cat "$acme_log"
     rm -f "$acme_log"
     return 1
