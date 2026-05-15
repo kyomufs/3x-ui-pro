@@ -229,7 +229,8 @@ issue_ssl_cert() {
   fuser -k 80/tcp 80/udp 443/tcp 443/udp >/dev/null 2>&1 || true
   "$acme_bin" --set-default-ca --server zerossl >>"$acme_log" 2>&1 || true
   "$acme_bin" --register-account --server zerossl -m "admin@${cert_domain}" >>"$acme_log" 2>&1 || true
-  if ! "$acme_bin" --renew -d "$cert_domain" --force --ecc --server zerossl --debug 2 >>"$acme_log" 2>&1; then
+  "$acme_bin" --remove -d "$cert_domain" --ecc >>"$acme_log" 2>&1 || true
+  if ! "$acme_bin" --issue --standalone --server zerossl -d "$cert_domain" --debug 2 >>"$acme_log" 2>&1; then
     cat "$acme_log"
     rm -f "$acme_log"
     return 1
