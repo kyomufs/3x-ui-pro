@@ -225,8 +225,7 @@ issue_ssl_cert() {
     --cert-file "$live_dir/cert.pem" \
     --key-file "$live_dir/privkey.pem" \
     --fullchain-file "$live_dir/fullchain.pem" \
-    --ca-file "$live_dir/chain.pem" \
-    --reloadcmd "nginx -s reload" >/dev/null 2>&1 || return 1
+    --ca-file "$live_dir/chain.pem" >/dev/null 2>&1 || return 1
 
   [[ -f "$live_dir/fullchain.pem" && -f "$live_dir/privkey.pem" ]] || return 1
 }
