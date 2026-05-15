@@ -199,6 +199,8 @@ issue_ssl_cert() {
   local cert_domain="$1"
   local live_dir="/etc/letsencrypt/live/${cert_domain}"
   local acme_bin="$HOME/.acme.sh/acme.sh"
+  local acme_log
+  acme_log="$(mktemp /tmp/acme-fallback-${cert_domain}.XXXXXX.log)"
 
   if certbot certonly --standalone --non-interactive --agree-tos --register-unsafely-without-email -d "$cert_domain"; then
     if [[ -d "$live_dir" ]]; then
@@ -209,25 +211,41 @@ issue_ssl_cert() {
   msg_inf "certbot failed for ${cert_domain}, falling back to acme.sh/ZeroSSL"
 
   if [[ ! -x "$acme_bin" ]]; then
-    curl -fsSL https://get.acme.sh | sh -s email="admin@${cert_domain}" >/dev/null 2>&1 || return 1
+    if ! curl -fsSL https://get.acme.sh | sh -s email="admin@${cert_domain}" >"$acme_log" 2>&1; then
+      cat "$acme_log"
+      rm -f "$acme_log"
+      return 1
+    fi
   fi
 
   if [[ ! -x "$acme_bin" ]]; then
     msg_err "acme.sh installation failed for ${cert_domain}"
+    [[ -f "$acme_log" ]] && cat "$acme_log"
+    rm -f "$acme_log"
     return 1
   fi
 
   mkdir -p "$live_dir"
-  "$acme_bin" --set-default-ca --server zerossl >/dev/null 2>&1 || true
-  "$acme_bin" --register-account --server zerossl -m "admin@${cert_domain}" >/dev/null 2>&1 || true
-  "$acme_bin" --issue --standalone --server zerossl -d "$cert_domain" >/dev/null 2>&1 || return 1
+  fuser -k 80/tcp 80/udp 443/tcp 443/udp >/dev/null 2>&1 || true
+  "$acme_bin" --set-default-ca --server zerossl >>"$acme_log" 2>&1 || true
+  "$acme_bin" --register-account --server zerossl -m "admin@${cert_domain}" >>"$acme_log" 2>&1 || true
+  if ! "$acme_bin" --issue --standalone --server zerossl -d "$cert_domain" --debug 2 >>"$acme_log" 2>&1; then
+    cat "$acme_log"
+    rm -f "$acme_log"
+    return 1
+  fi
   "$acme_bin" --install-cert -d "$cert_domain" \
     --cert-file "$live_dir/cert.pem" \
     --key-file "$live_dir/privkey.pem" \
     --fullchain-file "$live_dir/fullchain.pem" \
-    --ca-file "$live_dir/chain.pem" >/dev/null 2>&1 || return 1
+    --ca-file "$live_dir/chain.pem" >>"$acme_log" 2>&1 || {
+      cat "$acme_log"
+      rm -f "$acme_log"
+      return 1
+    }
 
   [[ -f "$live_dir/fullchain.pem" && -f "$live_dir/privkey.pem" ]] || return 1
+  rm -f "$acme_log"
 }
 
 issue_ssl_cert "$domain" || {
