@@ -16,25 +16,6 @@ log() {
 	echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> /var/log/backup_script.log
 }
 
-# Function to back up certificates
-backup_certificates() {
-	echo "Creating backup of certificates..."
-	CERT_PATHS=()
-	if [ -d /etc/letsencrypt ]; then
-		CERT_PATHS+=(/etc/letsencrypt)
-	fi
-	if [ -d /root/.acme.sh ]; then
-		CERT_PATHS+=(/root/.acme.sh)
-	fi
-	if [ ${#CERT_PATHS[@]} -eq 0 ]; then
-		echo "No certificate directories found. Skipping backup."
-		return
-	fi
-	tar -czf "$BACKUP_DIR_TIMESTAMP/certificates-$BACKUP_TIMESTAMP.tar.gz" "${CERT_PATHS[@]}"
-	echo "Backup completed."
-	log "Certificates backed up to $BACKUP_DIR_TIMESTAMP/certificates-$BACKUP_TIMESTAMP.tar.gz"
-}
-
 # Function to perform backup
 backup() {
 	# Ask for backup directory with default
@@ -62,10 +43,9 @@ backup() {
 		echo "2. 3x-ui database"
 		echo "3. 3x-ui config.json"
 		echo "4. Website files"
-		echo "5. Certificates"
-		echo "6. All of the above"
+		echo "5. All of the above"
 		echo "0. Exit"
-		read -p "Enter your choice (0-6): " OPTION
+		read -p "Enter your choice (0-5): " OPTION
 		
 		case $OPTION in
 			1)
@@ -106,10 +86,6 @@ backup() {
 				echo "Backup completed."
 				;;
 			5)
-				# Backup certificates
-				backup_certificates
-				;;
-			6)
 				# Backup all components
 				echo "Creating backup of all components..."
 				tar -czf "$BACKUP_DIR_TIMESTAMP/nginx-$BACKUP_TIMESTAMP.tar.gz" /etc/nginx
@@ -124,7 +100,6 @@ backup() {
 						echo "Web root $WEB_ROOT does not exist. Skipping backup."
 					fi
 				done
-				backup_certificates
 				echo "Backup completed."
 				;;
 			0)
