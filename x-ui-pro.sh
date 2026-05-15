@@ -1315,7 +1315,10 @@ msg_ok "Cloudflare WARP installed"
 
 # Configure Cloudflare WARP
 msg_inf "Configuring Cloudflare WARP..."
-warp-cli registration new > /dev/null 2>&1 || true
+yes 2>/dev/null | warp-cli registration new || {
+    msg_err "WARP registration failed"
+    exit 1
+}
 warp-cli mode proxy > /dev/null 2>&1 || true
 warp-cli connect > /dev/null 2>&1 || true
 msg_ok "Cloudflare WARP configured"
