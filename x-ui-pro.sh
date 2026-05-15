@@ -61,6 +61,7 @@ xhttp_path="EiOS25RRCx"
 config_username=$(gen_random_string 10)
 config_password=$(gen_random_string 10)
 AUTODOMAIN="n"
+CA_CHOICE="auto" # auto = certbot then fallback; letsencrypt = certbot only; zerossl = acme.sh ZeroSSL only
 
 ##################################Random Port and Path #################################################
 #RNDSTR=$(tr -dc A-Za-z0-9 </dev/urandom | head -c "$(shuf -i 6-12 -n 1)")
@@ -84,9 +85,76 @@ while [ "$#" -gt 0 ]; do
     -websub) CUSTOMWEBSUB="$2"; shift 2;;
     -clash) CLASH="$2"; shift 2;;
     -uninstall) UNINSTALL="$2"; shift 2;;
+    -ca|--ca) CA_CHOICE="$2"; shift 2;;
     *) shift 1;;
   esac
 done
+
+# Interactive selection for certificate authority if not provided
+if [[ "$CA_CHOICE" == "auto" ]] && [ -t 0 ]; then
+  echo "Select certificate provider:"
+  echo "1) Let's Encrypt (certbot)"
+  echo "2) ZeroSSL (acme.sh)"
+  echo "3) Auto (certbot then fallback)"
+  read -p "Choose (1-3, default 1): " CA_OPT
+  case "$CA_OPT" in
+    2) CA_CHOICE="zerossl";;
+    3) CA_CHOICE="auto";;
+    *) CA_CHOICE="letsencrypt";;
+  esac
+  msg_inf "Certificate provider set to: $CA_CHOICE"
+fi
+
+# Helper: obtain certificate according to CA_CHOICE
+obtain_cert() {
+  local cert_domain="$1"
+  local live_dir="/etc/letsencrypt/live/${cert_domain}"
+  local acme_bin="$HOME/.acme.sh/acme.sh"
+
+  if [[ "$CA_CHOICE" == "letsencrypt" ]]; then
+    certbot certonly --standalone --non-interactive --agree-tos --register-unsafely-without-email -d "$cert_domain"
+    if [[ ! -d "$live_dir" ]]; then
+      systemctl start nginx >/dev/null 2>&1
+      msg_err "$cert_domain SSL could not be generated with certbot."
+      return 1
+    fi
+    return 0
+  elif [[ "$CA_CHOICE" == "zerossl" ]]; then
+    # Use acme.sh ZeroSSL path (force fresh issuance)
+    local acme_log
+    acme_log="$(mktemp /tmp/acme-fallback-${cert_domain}.XXXXXX.log)"
+    if [[ ! -x "$acme_bin" ]]; then
+      if ! curl -fsSL https://get.acme.sh | sh -s email="admin@${cert_domain}" >"$acme_log" 2>&1; then
+        cat "$acme_log"; rm -f "$acme_log"; return 1
+      fi
+    fi
+    if [[ ! -x "$acme_bin" ]]; then
+      msg_err "acme.sh installation failed for ${cert_domain}"; [[ -f "$acme_log" ]] && cat "$acme_log"; rm -f "$acme_log"; return 1
+    fi
+    mkdir -p "$live_dir"
+    fuser -k 80/tcp 80/udp 443/tcp 443/udp >/dev/null 2>&1 || true
+    "$acme_bin" --set-default-ca --server zerossl >>"$acme_log" 2>&1 || true
+    "$acme_bin" --register-account --server zerossl -m "admin@${cert_domain}" >>"$acme_log" 2>&1 || true
+    "$acme_bin" --remove -d "$cert_domain" --ecc >>"$acme_log" 2>&1 || true
+    if ! "$acme_bin" --issue --standalone --force --server zerossl -d "$cert_domain" --debug 2 >>"$acme_log" 2>&1; then
+      cat "$acme_log"; rm -f "$acme_log"; return 1
+    fi
+    if ! "$acme_bin" --install-cert -d "$cert_domain" \
+      --cert-file "$live_dir/cert.pem" \
+      --key-file "$live_dir/privkey.pem" \
+      --fullchain-file "$live_dir/fullchain.pem" \
+      --ca-file "$live_dir/chain.pem" >>"$acme_log" 2>&1; then
+      cat "$acme_log"; rm -f "$acme_log"; return 1
+    fi
+    rm -f "$acme_log"
+    [[ -f "$live_dir/fullchain.pem" && -f "$live_dir/privkey.pem" ]] || return 1
+    return 0
+  else
+    # auto: try certbot then fallback to acme.sh (existing behavior)
+    issue_ssl_cert "$cert_domain"
+    return $?
+  fi
+}
 
 
 ##############################Uninstall#################################################################
@@ -249,13 +317,13 @@ issue_ssl_cert() {
   rm -f "$acme_log"
 }
 
-issue_ssl_cert "$domain" || {
+obtain_cert "$domain" || {
   systemctl start nginx >/dev/null 2>&1
   msg_err "$domain SSL could not be generated! Check Domain/IP Or Enter new domain!"
   exit 1
 }
 
-issue_ssl_cert "$reality_domain" || {
+obtain_cert "$reality_domain" || {
   systemctl start nginx >/dev/null 2>&1
   msg_err "$reality_domain SSL could not be generated! Check Domain/IP Or Enter new domain!"
   exit 1
