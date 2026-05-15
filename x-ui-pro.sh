@@ -1263,4 +1263,66 @@ else
 	nginx -t && printf '0\n' | x-ui | grep --color=never -i ':'
 	msg_err "sqlite and x-ui to be checked, try on a new clean linux! "
 fi
+##################################Fix ICMP echo (Two-way ping) - Disable tunnel############################
+msg_inf "Disabling ICMP echo (tunnel protection)..."
+echo "net.ipv4.icmp_echo_ignore_all=1" >> /etc/sysctl.conf
+sysctl -p > /dev/null 2>&1
+msg_ok "ICMP echo disabled"
+
+##################################Disable IPv6###########################################################
+msg_inf "Disabling IPv6..."
+echo "net.ipv6.conf.all.disable_ipv6 = 1" | tee -a /etc/sysctl.conf > /dev/null
+echo "net.ipv6.conf.default.disable_ipv6 = 1" | tee -a /etc/sysctl.conf > /dev/null
+echo "net.ipv6.conf.lo.disable_ipv6 = 1" | tee -a /etc/sysctl.conf > /dev/null
+sysctl -p > /dev/null 2>&1
+msg_ok "IPv6 disabled"
+
+##################################Remove HTTP port from UFW rules#########################################
+msg_inf "Removing HTTP (80/tcp) from UFW rules..."
+ufw delete allow 80/tcp > /dev/null 2>&1
+ufw reload > /dev/null 2>&1
+msg_ok "HTTP port removed"
+
+##################################Install Cloudflare WARP################################################
+msg_inf "Setting up Cloudflare WARP client..."
+
+# Add Cloudflare GPG key
+msg_inf "Adding Cloudflare GPG key..."
+curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg 2>/dev/null
+msg_ok "Cloudflare GPG key added"
+
+# Detect Ubuntu version
+msg_inf "Detecting Ubuntu version..."
+UBUNTU_VERSION=$(lsb_release -cs)
+DISTRO_CODENAME="noble"
+
+# Check if current version is not noble, suggest noble
+if [[ "$UBUNTU_VERSION" != "noble" ]]; then
+	msg_inf "Detected: $UBUNTU_VERSION (Ubuntu 24.04). Using noble codename."
+	DISTRO_CODENAME="noble"
+fi
+
+# Add Cloudflare repository
+msg_inf "Adding Cloudflare repository..."
+echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ ${DISTRO_CODENAME} main" | tee /etc/apt/sources.list.d/cloudflare-client.list > /dev/null
+msg_ok "Cloudflare repository added"
+
+# Update and install
+msg_inf "Updating package list and installing Cloudflare WARP..."
+$Pak update > /dev/null 2>&1
+$Pak install -y cloudflare-warp > /dev/null 2>&1
+msg_ok "Cloudflare WARP installed"
+
+# Configure Cloudflare WARP
+msg_inf "Configuring Cloudflare WARP..."
+warp-cli registration new > /dev/null 2>&1 || true
+warp-cli mode proxy > /dev/null 2>&1 || true
+warp-cli connect > /dev/null 2>&1 || true
+msg_ok "Cloudflare WARP configured"
+
+##################################Add WARP to crontab####################################################
+crontab -l | grep -v "warp-cli" | crontab -
+(crontab -l 2>/dev/null; echo '@reboot warp-cli connect > /dev/null 2>&1') | crontab -
+msg_ok "WARP auto-start added to crontab"
+
 #################################################N-joy##################################################
