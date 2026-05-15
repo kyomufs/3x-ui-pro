@@ -161,7 +161,7 @@ if [[ ${INSTALL} == *"y"* ]]; then
 
 	$Pak -y update
 
-	$Pak -y install curl wget jq bash sudo nginx-full certbot python3-certbot-nginx sqlite3 ufw
+  $Pak -y install curl wget jq bash sudo nginx-full certbot python3-certbot-nginx sqlite3 ufw socat
 
 	systemctl daemon-reload && systemctl enable --now nginx
 fi
@@ -195,18 +195,53 @@ if [[ ${AUTODOMAIN} == *"y"* ]]; then
     fi
 fi
 
+issue_ssl_cert() {
+  local cert_domain="$1"
+  local live_dir="/etc/letsencrypt/live/${cert_domain}"
+  local acme_bin="$HOME/.acme.sh/acme.sh"
 
-certbot certonly --standalone --non-interactive --agree-tos --register-unsafely-without-email -d "$domain"
-if [[ ! -d "/etc/letsencrypt/live/${domain}/" ]]; then
- 	systemctl start nginx >/dev/null 2>&1
-	msg_err "$domain SSL could not be generated! Check Domain/IP Or Enter new domain!" && exit 1
-fi
+  if certbot certonly --standalone --non-interactive --agree-tos --register-unsafely-without-email -d "$cert_domain"; then
+    if [[ -d "$live_dir" ]]; then
+      return 0
+    fi
+  fi
 
-certbot certonly --standalone --non-interactive --agree-tos --register-unsafely-without-email -d "$reality_domain"
-if [[ ! -d "/etc/letsencrypt/live/${reality_domain}/" ]]; then
- 	systemctl start nginx >/dev/null 2>&1
-	msg_err "$reality_domain SSL could not be generated! Check Domain/IP Or Enter new domain!" && exit 1
-fi
+  msg_inf "certbot failed for ${cert_domain}, falling back to acme.sh/ZeroSSL"
+
+  if [[ ! -x "$acme_bin" ]]; then
+    curl -fsSL https://get.acme.sh | sh -s email="admin@${cert_domain}" >/dev/null 2>&1 || return 1
+  fi
+
+  if [[ ! -x "$acme_bin" ]]; then
+    msg_err "acme.sh installation failed for ${cert_domain}"
+    return 1
+  fi
+
+  mkdir -p "$live_dir"
+  "$acme_bin" --set-default-ca --server zerossl >/dev/null 2>&1 || true
+  "$acme_bin" --register-account --server zerossl -m "admin@${cert_domain}" >/dev/null 2>&1 || true
+  "$acme_bin" --issue --standalone --server zerossl -d "$cert_domain" >/dev/null 2>&1 || return 1
+  "$acme_bin" --install-cert -d "$cert_domain" \
+    --cert-file "$live_dir/cert.pem" \
+    --key-file "$live_dir/privkey.pem" \
+    --fullchain-file "$live_dir/fullchain.pem" \
+    --ca-file "$live_dir/chain.pem" \
+    --reloadcmd "nginx -s reload" >/dev/null 2>&1 || return 1
+
+  [[ -f "$live_dir/fullchain.pem" && -f "$live_dir/privkey.pem" ]] || return 1
+}
+
+issue_ssl_cert "$domain" || {
+  systemctl start nginx >/dev/null 2>&1
+  msg_err "$domain SSL could not be generated! Check Domain/IP Or Enter new domain!"
+  exit 1
+}
+
+issue_ssl_cert "$reality_domain" || {
+  systemctl start nginx >/dev/null 2>&1
+  msg_err "$reality_domain SSL could not be generated! Check Domain/IP Or Enter new domain!"
+  exit 1
+}
 ################################# Access to configs only with cloudflare#################################
 
 ###################################Get Installed XUI Port/Path##########################################
